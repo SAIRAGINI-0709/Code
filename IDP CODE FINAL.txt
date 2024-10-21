@@ -1,0 +1,139 @@
+# Import all required libraries
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import classification_report, confusion_matrix
+
+
+# Set the dataset directory path
+dataset_dir = '/content/drive/MyDrive/idp_dataset/melanoma_cancer_datasett'  # Update with the correct folder path
+
+# Function to count images in each set
+def count_images(dataset_path):
+    train_path = os.path.join(dataset_path, '/content/drive/MyDrive/idp_dataset/melanoma_cancer_dataset/train')
+    test_path = os.path.join(dataset_path, '/content/drive/MyDrive/idp_dataset/melanoma_cancer_dataset/test')
+
+    def count_images_in_directory(directory):
+        count = 0
+        for subdir, dirs, files in os.walk(directory):
+            count += len(files)
+        return count
+
+    train_count = count_images_in_directory(train_path)
+    test_count = count_images_in_directory(test_path)
+
+    print(f"Total training images: {train_count}")
+    print(f"Total test images: {test_count}")
+
+# Call the function to count images in train and test folders
+count_images(dataset_dir)
+
+
+# Define image size and batch size
+IMAGE_SIZE = (224, 224)
+BATCH_SIZE = 32
+
+# Data Augmentation for training dataset
+train_datagen = ImageDataGenerator(
+    rescale=1.0/255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+# Data Preprocessing for test dataset (only rescaling)
+test_datagen = ImageDataGenerator(rescale=1.0/255)
+
+# Load training data
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(dataset_dir, '/content/drive/MyDrive/idp_dataset/melanoma_cancer_dataset/train'),
+    target_size=IMAGE_SIZE,
+    batch_size=BATCH_SIZE,
+    class_mode='categorical'
+)
+
+# Load test data
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(dataset_dir, '/content/drive/MyDrive/idp_dataset/melanoma_cancer_dataset/test'),
+    target_size=IMAGE_SIZE,
+    batch_size=BATCH_SIZE,
+    class_mode='categorical'
+)
+
+# Preview the class indices
+print("Class Indices:", train_generator.class_indices)
+
+
+# Build CNN model
+model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Conv2D(64, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Conv2D(128, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Flatten(),
+    Dense(512, activation='relu'),
+    Dropout(0.5),
+    Dense(train_generator.num_classes, activation='softmax')  # Adjust based on the number of classes
+])
+
+# Compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+
+# Set up Early Stopping to avoid overfitting
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+
+# Train the model
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+history = model.fit(
+    train_generator,
+    steps_per_epoch=train_generator.samples // BATCH_SIZE,
+    epochs=50,
+    callbacks=[early_stopping]
+)
+
+
+# Evaluate the model on the test set
+val_loss, val_accuracy = model.evaluate(test_generator)
+print(f'Validation Accuracy: {val_accuracy * 100:.2f}%')
+
+
+# Generate predictions
+predictions = model.predict(test_generator)
+predicted_classes = np.argmax(predictions, axis=1)
+
+# Get true classes
+true_classes = test_generator.classes
+class_labels = list(test_generator.class_indices.keys())
+
+# Classification report
+print("Classification Report:\n", classification_report(true_classes, predicted_classes, target_names=class_labels))
+
+# Confusion Matrix
+conf_matrix = confusion_matrix(true_classes, predicted_classes)
+print('Confusion Matrix:\n', conf_matrix)
+
+# Plot confusion matrix
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=class_labels, yticklabels=class_labels)
+plt.ylabel('Actual')
+plt.xlabel('Predicted')
+plt.title('Confusion Matrix')
+plt.show()
+id
